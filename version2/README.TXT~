@@ -1,0 +1,595 @@
+
+IGCview FAQ - Ian Forster-Lewis 17/March/1998
+
+Section 1: General
+Q.1.1 What's IGCview?
+Q.1.2 Where's the documentation?
+Q.1.3 What does IGCview require to run?
+Q.1.4 What's IGCview written in?
+
+Section 2: How to analyse your favorite logs
+Q.2.1 How do I load an IGC file
+Q.2.2 How do I load a Gardown file
+Q.2.3 I've loaded a log, but the main screen is blank - what do I do?
+Q.2.4 How do I define a task (i.e. a route)
+Q.2.5 Why can't I see the bit of the flight before/after the start?
+Q.2.6 How do I get the barograph trace?
+Q.2.7 How do I get that funky height-with-distance graph?
+Q.2.8 How does IGCview detect thermals?
+Q.2.9 How can I replay one or more logs in a maggot race?
+Q.2.10 How do I zoom in to a particular bit of the trace?
+Q.2.11 How do I zoom back out again?
+Q.2.12 I've got multiple logs loaded - how do I get the "Flight Data"
+       analysis for one of them?
+Q.2.13 How/why do I *save* an IGC file?
+Q.2.14 How do I use the cursors?
+Q.2.15 What's the difference between the primary and secondary traces?
+Q.2.16 How do I find the lat/long of a point on the trace or map?
+
+Section 3: How to use IGCview to assist in scoring a gliding competition
+Q.3.1 How are start times calculated?
+Q.3.2 How are finish times calculated?
+Q.3.3 How are turnpoints verified as being correctly rounded
+Q.3.4 How is landing-out detected?
+Q.3.5 What is the total task distance calculation?
+Q.3.6 What is the task speed calculation?
+Q.3.7 How do I use the ruler?
+Q.3.8 What about gliders that screw up their turnpoints?
+
+Section 4: Configuration options
+
+Section 5: Common problems
+
+Q.5.1 Only a small fragment of the trace appears on the map
+Q.5.2 The screen is blank, but I've loaded a trace
+Q.5.3 My configuration is screwed up
+Q.5.4 Balls, I've loaded the same trace twice! What should I do?
+Q.5.5 I've rounded the task twice.  How do I analyze the second effort?
+
+==============================================================================
+Section 1: General
+
+Q.1.1 What's IGCview?
+
+IGCview is a program written by Ian Forster-Lewis with considerable input from
+Ruud Holswilder, to display and analyze GPS log files in the IGC (International
+Gliding Commission) or Gardown formats.  Both formats contain simple
+ascii records of timestamped latitude/longitude data, with the IGC format
+also containing altitude (pressure and/or GPS) and the task (route).
+The program is wholly oriented towards looking at the GPS log traces produced
+by gliders, so you can look at other traces, but the analysis will not be
+particularly useful.
+
+The software has been written as an initiative to give glider pilots some
+pretty reasonable analysis software *for free*, for the general benefit of
+the gliding community.  If you think the software sucks, or the 'help' is
+crap, or the design flawed, then put a message on the web server set up
+by Ruud to get the project moving:
+   "http://www.geocities.com/CapeCanaveral/Hangar/1850/igcview/"
+and help us improve it.  Best of all, learn to program in Java and we'll
+send you the source, and you can code some improvements, which can be
+incorporated into the next release (if this happens it will be a miracle.)
+
+The program gives three major views of the data:
+* an overhead view, i.e. a 2D plot of your track which could potentially
+  be overlaid on a graph.
+* the graph of height with time - this is the barograph trace familiar to
+  glider pilots
+* the graph of height with distance travelled around an assigned task (i.e.
+  route).  This is a graph similar to the braograph trace, but actually
+  represents a 2D projection of the trace onto a sequence of planes lying
+  vertically between each waypoint (turnpoint in glider-speak).
+
+Q.1.2 Where's the documentation?
+
+Check out "http://www.geocities.com/CapeCanaveral/Hangar/1850/igcview/"
+for and outstanding piece of work by Ruud Holswilder.
+
+Q.1.3 What does IGCview require to run?
+
+IGCview will run on any machine with support for Java 1.1.  In particular
+this means Windows 95 and Windows NT, and most Unix workstations.  I
+think there's Java support for the PowerMac also.
+
+At the moment you have to install the Java support from somewhere, and it's
+included in the IGCview zip file on 
+"http://www.geocities.com/CapeCanaveral/Hangar/1850/igcview/"
+but at some point we'll just use the Java support that included in
+Microsoft Internet Explorer Version 4, and Netscape Version 4.
+
+Q.1.4 What's IGCview written in?
+
+IGCview is written in Java (version 1.1.5), which means 
+(a) the program is portable and will run on any Java-supporting machine,
+    today including Windows 95, Windows NT, most Unix's.
+(b) The program can be placed as an applet on a web page, so people
+    can access the program across the world-wide-web.  This is for the
+    *next* version, however.  Then you'll be able to see maggot-races of
+    glider races, instead of just the text results.
+
+
+==============================================================================
+Section 2: How to analyse your favorite logs
+
+Q.2.1 How do I load an IGC file
+
+Use the menu option "Track" then the submenu "Load".  IGCview will
+prompt you with a File Load dialog set to the previously used directory,
+or the initial directory set in the Configuration (see Section 4).
+
+IGCview will pick up the date, glider-id, task, and timestamped lat/long/
+altitude records from the file, and store them internally for display and
+analysis.
+
+If IGCview can't pick up a date from the IGC file, it will use today's date.
+If it doesn't get a valid task from the IGC file, you have to set one up
+using the Task menu option (see Q.2.4).
+The glider-id is taken from the IGC file glider-id or competition-id
+records, whichever occurs last.  If neither record appears in the IGC
+file, then IGCview uses the filename (preceding the .igc) as the
+glider-id.
+
+IGCview doesn't care what the file is called, but it makes sense to use
+a suffix ".igc" to make the files easy to recognize.  I recommend naming
+the files with your glider id, as in B21.igc, to make them easy to
+sort out if you have many files from the same competition day.
+
+Q.2.2 How do I load a Gardown file
+
+Use exactly the same procedure as for the IGC file (see Q.2.1).  IGCview
+will recognize the different tracklog records within the file (they
+have a different format in gardown files from IGC files).
+
+As gardown files don't contain the funky header records that appear in
+IGC files, IGCview gets the date from the *first* valid tracklog record,
+uses the filename prefix (before the '.') as the glider-id, and will
+*not* find a task within the file.  Thus when you create the gardown tracklog
+file, it makes sense to name the file <glider-id>.gdn, or something
+similar (where <glider-id> is your glider registration, e.g. B21.gdn).
+
+Q.2.3 I've loaded a log, but the main screen is blank - what do I do?
+
+See Q.5.2
+
+Q.2.4 How do I define a task (i.e. a route)
+
+Use the menu option on the main screen: "Task" "Define Task".
+If the turnpoint (i.e. waypoint) database has not been loaded before, it
+will be loaded now.  The turnpoint file must be in 'gardown' format, and
+many are available at John Leibacher's site:
+    "http://acro.harvard.edu/SSA/JL/TP/HomePage.html"
+
+The IGCview distribution includes "bga.gdn" which is the turnpoint
+database for Great Britain.  This file is the *default* turnpoint
+database.  If you want to use a different turnpoint file, put the
+name in the configuration (see Section 5) *before* you open the
+"Define Task" window.  Then when you do open the "Define Task" window,
+the correct file will be opened.
+
+Maybe we'll include the TP file for the Netherlands as well, as Ruud
+has sorted a good one out and we've used it a lot in testing.
+
+After you've defined a task, *all* the turnpoints defined in the 
+turnpoint file will appear on the map screen.  I delay the loading of
+the turnpoint database to give good performance in the (forthcoming)
+internet version of the program.
+
+If your IGC file contains good task records (they're defined in the
+IGC spec as beginning with 'C'), then IGCview will pick up the
+task from the IGC file.  This is usually the most convenient way of
+getting the task onto the screen.
+
+If your IGC file does *not* contain the task, it may be worth
+loading the IGC file, defining a task using IGCview and then saving 
+an IGCfile (which will now automatically include the current task).
+The new IGC file contains all the lat/long records from the original 
+IGC file, but also has brand new task records so you no longer have 
+to manually enter the task each time you look at the log.
+
+Q.2.5 Why can't I see the bit of the flight before/after the start?
+
+The configuration option 'trim logs' is by default set to 'true'.  When
+the log is drawn on the map view, the sections before the start and after
+the finish are not drawn, to lessen clutter on the map.
+
+If you want to see the pre-start wandering about, change the
+'trim logs' configuration option (see Section 4).
+
+Q.2.6 How do I get the barograph trace?
+
+Use the menu option "Window" "Altitude".  You may have to adjust the
+size of the window and mess with the scroll bars to see the full trace.
+
+The options "X-axis" "Expand" and "Compress" allow you to alter the
+timescale along the x-axis.  Generally you'll have to move the 
+horizontal scroll bar after an 'expand' to get back to the section you're
+interested in.  It might help if you set a 'cursor' on the point of
+interest (see Q.2.14).
+
+Q.2.7 How do I get that funky height-with-distance graph?
+
+Use the menu option "Window" "Altitude", and then change the x-axis
+from displaying time to displaying distance with "X-Axis" "Distance".
+
+The distance measurement used is the 'task distance', which is the
+cumulative distance around the task to the next turnpoint, minus the 
+distance the glider is from that turnpoint.  A way of visualizing the
+trace is as if the flight were projected against a big vertical piece of
+paper suspended between each turnpoint, and your looking at it from the
+side.
+
+As with the baro trace in Q.2.6, you can expand/compress the x-axis.
+
+Q.2.8 How does IGCview detect thermals?
+
+IGCview does not use altitude *at all* to detect thermalling, and defines
+a 'thermal' as any point at which your cross country speed over the
+next 30 seconds falls below 40 knots.  This technique has a couple of
+advantages over using height climb/fall thresholds:
+* Those crappy one-circle turns you took in the hope of a climb are
+  still picked up as a thermal, and included in your averages  - this
+  means that IGCview will often give you a lower thermalling average than
+  other packages.
+* IGCview can provide some thermalling statistics from Gardown logfiles,
+  such as number of climbs taken, and percent of time spent circling.
+
+The downside is that IGCview doesn't provide useful automatic analysis of
+thermals in an IGC file that *only* contains height data, whereas the
+EQ analysis software has the heritage of originally being baro analysis
+software.  You can still use the cursors to inspect any climb on the
+baro trace to get the average though (see Q.2.14).
+
+Q.2.9 How can I replay one or more logs in a maggot race?
+
+Load up multiple logs with "Track" "Load Track".  Look at the
+"Track" "Select Tracks" panel to confirm you've loaded what you
+expected (then close this panel).  Then start the race with "Replay"
+"Real Time", and the glider icons will move around the course for your
+viewing pleasure.  You can speed up the race with up-arrow, slow it down with
+down-arrow, and race forwards or backwards with the right- and left-arrows.
+Pause the race with the 'pause' key.  If the race seems slow to get started,
+hit the up-arrow a few times to speed it up, then 'pause', then slow it down
+again, and then hit right-arrow to continue the race.
+
+The trouble with racing 'Real Time" is that one or more logs may have
+a lot of data before the start, and you have to wait awhile before the
+race gets going proper.
+
+If you have a task defined, you can make the race more convenient by
+using "Replay" "Synchro Start".  IGCview will adjust all the flights by
+the right amount to have them pass through the startgate simultaneously,
+so that the maggot race has more meaning, *and* as the animation starts
+at 20mins or so before the synchonized start, you are insulated against
+some logger's mass of logger records saved while sitting on the ground.
+
+I guess the most important part of the 'Synchro Start' maggot race though is
+that it gives you a more meaningful comparison of the competitors relative
+performance, paritcularly when the starts were only a few minutes apart.
+However, you still want to look at the 'Real Time' maggot race if you want to
+see how much pilot gaggle-fly in modern competition, and who was leaching off
+who...
+
+Q.2.10 How do I zoom in to a particular bit of the trace?
+
+This is easy... click the mouse on the top left corner of the area you
+want to zoom into, and drag the mouse down to the bottom right corner.
+You'll see a white rectangle appear (called a 'zoom box').  When you
+release the mouse button, the area you surrounded with the zoom box
+will fill the screen.  You can very quickly examine your flight around
+turnpoints, for example.  As far as I can tell, this 'zoom box' idea is
+by far the most convenient way of moving around the map.  You start with
+the map "zoomed to task", and then you zoom in on each turnpoint with a
+"zoom box" and zoom back out to see somewhere else.
+
+Q.2.11 How do I zoom back out again?
+
+Use the menu option "Zoom" "Zoom Out". IGCview keeps a history of your
+"zoom in's" and "zoom out's", such that "Zoom Out" will take you back to
+the screen you just left before the previous "Zoom In".
+
+Alternatively you can "Zoom to task" if you have a task defined, which will
+put the task area on the map screen, or you can "Zoom Reset" which will
+take you back to the scale and coordinates defined in your configuration
+file (Section 4).
+
+Q.2.12 I've got multiple logs loaded - how do I get the "Flight Data"
+       analysis for one of them?
+
+Use the menu option "Track" "Select Tracks" and set your desired track as
+the *primary*.  The "Flight Data" window is primarily an analysis of the
+primary, compared against a composite of the secondary logs.  If the
+multiple logs loaded are all yours, from different flights, then I presume
+you would have *none* of the flights selected as secondary, and would
+pick one flight at a time to be the primary.
+
+If you've loaded a load of competition logs from the same competition day,
+then you would probably pick your own flight as the primary, with
+everyone else as the secondary.  Then you could maggot race the whole
+day's racing.  "Flight Data" will then compare your performance with
+everyone elses, and the "Climb Profile" graph will give an average
+curve for all the competitors.
+
+For more detailed analysis after a competition, you might leave your
+own flight as the primary and only select the day winner as the secondary,
+or perhaps the top five day placers, or maybe just the bastard you're trying
+to beat.
+
+Q.2.13 How/why do I *save* an IGC file?
+
+How: Use the menu option "File" "Save primary log as IGC file".  You'll be
+prompted for a directory/filename.
+
+Why: It's a good way to convert a gardown file into an IGC file (load the
+     gardown file, define the task, save the IGC file).
+     It also enables you to embed the task into the IGC file, if it wasn't
+     in there before, which is convenient for subsequent loads.
+
+Q.2.14 How do I use the cursors?
+
+'Click' the mouse anywhere on the main map screen, and IGCview will set
+the cursor to the *nearest* log point and open a 'cursor data' window.
+The units used in the 'cursor data' window are specified in the
+configuration (Section 4).
+
+There are *two* cursors, let's call them cursor1 and cursor2...
+cursor1 is set when you click the mouse near a log point.
+cursor2 initially is set to one logpoint further along the trace from
+cursor1, and can be moved along the trace with the left- and right-arrow
+keys.  The 'Home' key moves cursor1 to the start of the trace, 'End'
+moves cursor2 to the end of the trace, and 'Insert' moves cursor1 to
+wherever cursro2 is (get it?).
+
+The 'cursor data' window has two halves:
+The top half shows the data at and between the two cursor points, so
+you can measure speeds between two points or pick up spot altitudes.
+The bottom half give the data pertinent to the *section* of the
+flight you are in, where a section is the current climb or cruise.
+Thus if you want the climb average for a thermal, just click the
+mouse somewhere on the thermal, and the bottom half of the 'cursor data'
+window will tell you most of what you want to know.  Similarly click on
+an inter-thermal cruise section to see the cruise speed, length, L/D,
+etc of that particular cruise.  In particular I like clicking on
+final glides to see how long they were in time and distance.
+
+Q.2.15 What's the difference between the primary and secondary traces?
+
+None really, except that IGCview gets the task from the primary log,
+and the various analysis windows have the primary log highlighted in
+blue (by default).  The distinction is important for the "Flight Data"
+and "Climb Profile" windows, as the primary is compared with the
+secondaries.  The cursors (see Q.2.14) only apply to the primary log.
+
+Q.2.16 How do I find the lat/long of a point on the trace or map?
+
+Use the ruler, Q.3.7
+
+==============================================================================
+Section 3: How to use IGCview to assist in scoring a gliding competition
+
+Q.3.1 How are start times calculated?
+
+IGCview scans forwards through the log until it find a logpoint in the
+turnpoint sector for the first TP (after the start).  It then scans
+*backwards* to pick up the last log point still in the start sector, and
+uses that as the start point.
+
+If you land out without rounding the first turnpoint, IGCview scans
+*backwards* from the point in the trace furthest from the startpoint
+to find the last log point still in the start sector (not that it really 
+matters if you've landed out).
+
+Q.3.2 How are finish times calculated?
+
+IGCview scans forwards along the trace, detecting the rounding of each
+turnpoint in turn.  Assuming you've rounded all the TP's successfully,
+IGCview uses the first logpoint found in the finish sector as the finish time.
+
+IGCview does *not* interpolate between logpoints to provide a more accurate
+finish time.  This hasn't proved much of an issue with most current loggers.
+
+Q.3.3 How are turnpoints verified as being correctly rounded
+
+If 'beercan' sectors are used (see Section 4):
+  IGCview scans along the trace measuring the distance of each log point from
+  the next TP.  When that distance falls with the required radius of the
+  'beercan', a successful rounding is recorded and IGCview flips onto searching
+  for a successful rounding of the next TP.
+
+If 'photo sectors' are used:
+  IGCview scans along the trace as with the beercan technique, but measures
+  the *track* to the next TP as well as the distance.  When both these things
+  fall within the parameter of the TP sector (default 3km, 45 degrees
+  either side of the bisector), IGCview records a valid turn.
+
+The first point found in sector is highlighted (by default) with a little
+yellow square.
+
+Q.3.4 How is landing-out detected?
+
+IGCview does *not* use altitude to detect an outlanding, but checks that the
+cross-country speed has been consistently below 4 knots (averaged over 30
+seconds) for a period of 2 minutes, or if there's a break in the trace for
+more than 4 minutes.  These parameters seem to work ok, but I might adjust
+them if it seems necessary.  The landout point recognized by IGCview is
+highlighted (by default) with a little yellow square.
+
+Q.3.5 What is the total task distance calculation?
+
+The IGC standard calculation - distance around the task to the next TP, minus
+your distance from that TP.   There is a small correction applied if you
+turn a TP but then land somewhere futher from the next TP than
+that TP (get it?):  the last TP rounded places a 'floor' on the distance
+achieved, such that the calculated distance will not be reduced if you turn 
+a TP and then land while travelling *away* from the next turnpoint.
+
+Q.3.6 What is the task speed calculation?
+
+('finish time' - 'start time') divided by 'total task distance'
+
+Note that start time and finish time are from log points as in Q.3.1 and Q.3.2.
+
+Q.3.7 How do I use the ruler?
+
+On the map menu, use menuoption "Tools" "Ruler/Zoom".  When selected, the
+'zoom box' is no longer available, and IGCview draws a line (ruler) instead
+of a rectangle as you drag the mouse.
+
+A 'ruler data' window opens which gives the lat/long of the point under the
+mouse as it is dragged, and the track and length of the line are displayed.
+
+In competition scoring you can use the ruler to confirm the lat/long of a 
+landout position, and to measure the distance between that landout position
+and the finish (or next TP).
+
+Q.3.8 What about gliders that screw up their turnpoints?
+
+IGCview will analyze that flight as a *landout*.  If on looking at the TP
+you decide that's a bit harsh, and just want to give the pilot a penalty,
+then relax the constraints for the TP sector (e.g. if it's photo sector, then
+change to 'beercan 3km'), and IGCview will then (if you've been lax enough)
+accept the flight as a completion.  Note that to get IGCview to use new
+parameters for the TP sector definition you must:
+  1) Modify the configuration in "File" "Startup Configuration", see
+     Section 4, to use more lenient sectors.
+  2) Select "File" "Use these settings" from within the config panel so
+     that IGCview has these settings now as defaults (for this run).
+  3) On the main window go "Task" "Define Task" "OK" to 'pretend' to
+     define a new task so that IGCview recalculates the turnpoint times
+     for every selected (primary and secondary) log.  If you miss this
+     step  IGCview will draw pretty circles on the map representing the
+     new beercan sectors (if that's what you've chosen) but the primary
+     task will still have the turnpoint times form the earlier assessment
+     done when the log was loaded or the task first defined.
+
+To assess a given TP for penalties, zoom in to the pertinent TP, and use
+the 'ruler' to measure the pilots error.  You can measure the distance from
+the sector by measuring  from the nearest log point to the sector, and you can
+calculate the angle error by starting the ruler on the TP, dragging the
+ruler along the the nearest sector boundary to see the track of that boundary,
+and then moving the ruler around to the 'best' log point to see the track
+from the TP to that log point.  The difference of these two track angles gives
+you the angle error outside the sector.
+
+Section 4: Configuration options
+
+To modify the configuration of IGCview, use "File" "Startup Configuration"
+on the main window menu.
+
+There are quite a few options, and hopefully most are self-explanatory.
+
+After you've modified the configuration, you must select "File"
+"Use these setting" to get IGCview to accept the changes.  As mentioned 
+above in Q.3.8, you may have to re-define the task, or re-load a log, to
+have some changes take effect.
+
+If you want the changes to become the defaults for each run of the
+program, you should:
+  1) use "File" "Startup Configuration" to bring up the config panel
+  2) make the changes
+  3) select "File" "Use these settings" on the config panel to get
+     IGCview to accept the changes
+  4) re-open the config panel with "File" "Startup Configuration" on the
+     main window again
+  5) select "File" "Save Configuration" on the config panel menu and
+     save the configuration in a file called "IGCview.cfg".
+
+IGCview reads the file "IGCview.cfg" on startup and uses the parameters
+found within it.  If you think you've screwed this file up, just delete it -
+IGCview will start ok using defaults, and you can save a new one.
+
+'Box around thermals' : When IGCview detects thermalling flight, it
+  scans along it and records the boundaries (max/min lat/long) of the
+  circling flight.  If you select this option, IGCview will draw a box
+  around each 'thermal' it's detected.  Default=true.
+
+'Mark thermal entry/exit' : More for debugging than anything else.  If
+  'Box around thermals' and this are both selected, then IGCview will mark
+  with a little square those log points at which it thinks you entered and
+  left the thermal.  If the 'Box around thermals' option is false, this
+  option is ignored.
+
+'Mark sector entry' : if 'true', IGCview draws a little box marking the
+  log point at which IGCview thinks you entered the TP sector.  Default=true.
+
+'Mark turnpoints on map' : if 'true' draw a little circle on the map for
+  every turnpoint found in the TP database.
+
+'Display TP names' : if 'true', write the TP names for every TP in the
+  TP database on the map at the correct point.
+
+'Display turnpoint sectors on the map' : TP sectors are always drawn on
+  the 'TP Detail" window, but if this option is 'true' then they will
+  also be drawn on the main map window.  The 'TP Detail' window seemed
+  like a good idea at the time, but the funky zoom and the sectors and
+  ruler on the main map probably make the 'TP Detail' window redundant.
+
+'Draw altitude sticks in Replay (default BELOW)': if 'true', IGCview
+  draws a vertical stick above or below the glider icon in the maggot
+  race, to give an indication of altitude.  If it's false, no altitude
+  sticks will be drawn.
+
+'Altitude sticks ABOVE planes'; if 'true', and the above option is 'true',
+  the altitude sticks will be drawn ABOVE the planes.  If
+  this option if 'false', and the obove option is 'true', then altitude
+  sticks will be drawn BELOW the planes in the maggot race.  Note that
+  if the altitude sticks are drawn below the plane, then the BOTTOM of
+  the stick represents the position of the plane on the map - you have
+  to imagine the stick as a pin, with the plane on the top.
+
+'Glider icons in Replay (default LOLLIPOPS)' : if 'true' then little
+  glider icons aligned to the track will be drawn in the maggot race.  If
+  'false', then lollipops will be drawn which are less fun to look at but
+  possibly easier to disinguish in a race of 30+ gliders.
+
+'Trim track logs before start/finish' : if 'true', and you've got a task
+  defined, IGCview will only draw a small amount of the log preceding the
+  task, to reduce clutter on the map.  If you think there's something
+  important in there, then switch this option off and have a look.
+
+'Beer-can TP sectors': if 'true' then IGCview will only use distance to
+  check the validity of turns around turnpoints, i.e. the flight must fall
+  within the 'radius of TP sector' to be accepted as an ok turn.  If 'false',
+  then IGCview uses the IGC photo sectors, 45 degrees either side of the
+  bisector of the ingoing and outgoing tracks (these tracks are given in the
+  "Define Task" panel accessible off the main window).
+
+'Radius of TP sector (meters)' : see above beer-can stuff.
+
+'Perpendicular start line (vs photo sector)' : if 'true' (the default),
+  IGCview will accept as a valid start point the last log point in a 
+  180 degree start sector opposite the outgoing first leg (i.e. a usual
+  start 'line').  If 'false', IGCview uses an IGC photo sector 45 degrees
+  either side of the out-going first leg.
+
+'Radius of start line (km)': IGC will only accept a valid start for a log
+  point within this distance from the startpoint (and also within the
+  sector as described above).
+
+'Local time offset from UTC': All IGC file data is UTC (Greenwich Mean Time).
+  IGCview will add this constant to all times displayed to give you local time.
+
+The following config parameters can be set by XXXXXXXXXXXXXXXXXXX
+
+'Startup scale (pixels/degree)'
+
+Section 5: Common problems
+
+Q.5.1 Only a small fragment of the trace appears on the map
+Q.5.2 The screen is blank, but I've loaded a trace
+
+If you have multiple logs loaded, use "Track" "Select Tracks" and
+If the log contains a task, "Zoom to Task" and the trace will appear on
+the screen.
+
+Q.5.3 My configuration is screwed up
+Q.5.4 Balls, I've loaded the same trace twice! What should I do?
+Q.5.5 I've rounded the task twice.  How do I analyze the second effort?
+
+
+
+
+
+
+
+
+

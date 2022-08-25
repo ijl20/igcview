@@ -1,0 +1,655 @@
+Option Explicit
+
+Const MaxTracks As Integer = 10 ' Internal configuration limit for maximum number of tracks
+Const MaxTPs As Integer = 10    ' Max number of TP's permitted in task
+
+Dim MapSheet As Object
+Dim ConfigSheet As Object
+
+Dim Cursor1, Cursor2 As Object ' scroll bar objects
+Dim Cursor1Obj, Cursor2Obj As Object ' cursor drawing objects
+
+Dim CurrentLog As Integer
+
+Dim XScale, YScale As Single
+Dim MapOriginLat, MapOriginLong As Single
+
+Dim Xsize, YSize As Integer
+
+Dim ZoomXScale, ZoomYScale As Single
+Dim ZoomOriginLat, ZoomOriginLong As Single
+
+Dim PrevX1, PrevX2, PrevY1, PrevY2 As Integer
+
+Dim TrackCount As Integer ' Count of tracks to be loaded
+
+Dim TrackTime(MaxTracks, 10000) As Long
+Dim TrackLat(MaxTracks, 10000) As Single
+Dim TrackLong(MaxTracks, 10000) As Single
+Dim TrackAlt(MaxTracks, 10000) As Integer
+Dim TrackLength(MaxTracks) As Integer  ' number of elements in track log
+Dim TrackOffset(MaxTracks) As Integer  ' time offset in seconds relative to latest starter
+Dim TrackCurrent(MaxTracks) As Integer ' current element in each track log
+Dim TrackColour(MaxTracks) As Long
+Dim LineX1(MaxTracks), LineX2(MaxTracks), LineY1(MaxTracks), LineY2(MaxTracks) As Integer ' used in WormRace
+Dim WormObj(MaxTracks) As Object
+Dim TrackCursor1(MaxTracks), TrackCursor2(MaxTracks) As Integer
+
+Dim TPTime(MaxTracks, MaxTPs) As Long
+
+Dim WormDelay As Long
+Dim ShiftFactor As Single
+Dim TPCount As Integer ' number of TP's in task: set in DrawTask
+Dim MaxStart As Long ' time of latest start
+Dim TaskLength As Single
+Dim ThermalColour As Long
+
+Sub Initialise()
+    Dim I As Integer
+    
+    Call Init
+    With ConfigSheet
+        XScale = .Cells(25, "C").Value
+        YScale = .Cells(26, "C").Value
+        MapOriginLat = .Cells(23, "C").Value
+        MapOriginLong = .Cells(24, "C").Value
+        Xsize = .Cells(27, "C").Value
+        YSize = .Cells(28, "C").Value
+        WormDelay = .Cells(31, "C").Value
+        ShiftFactor = .Cells(32, "C").Value
+        ThermalColour = .Cells(36, "C").Interior.Color
+        For I = 1 To MaxTracks
+            TrackColour(I) = .Cells(I + 2, "E").Interior.Color
+        Next I
+    End With
+    ZoomXScale = XScale
+    ZoomYScale = YScale
+    ZoomOriginLat = MapOriginLat
+    ZoomOriginLong = MapOriginLong
+    PrevX1 = 0
+    PrevX2 = 0
+    PrevY1 = 0
+    PrevY2 = 0
+    MaxStart = 0
+    With MapSheet       ' reset log cells to black
+        For I = 1 To MaxTracks
+            With .Cells(I, "A").Interior
+                .Color = RGB(0, 0, 0)
+                .Pattern = xlSolid
+            End With
+        Next I
+        .ScrollBars("Scroll Bar 31553").Value = 0
+        .ScrollBars("Scroll Bar 31554").Value = 0
+        For I = 1 To 2
+            .Cells(I, "D").Interior.Color = ConfigSheet.Cells(33, "C").Interior.Color
+            .Cells(I, "E").Interior.Color = ConfigSheet.Cells(34, "C").Interior.Color
+        Next I
+    End With
+End Sub
+
+Sub LoadLogs()
+    Dim I As Integer
+    
+    Call Init
+    Let TrackCount = ConfigSheet.Cells(1, "E").Value
+    For I = 1 To TrackCount
+        Call LoadLog(I)
+    Next I
+End Sub
+
+Sub Init()
+    Set ConfigSheet = Sheets("Config")
+    Set MapSheet = Sheets("Map")
+    Set Cursor1 = MapSheet.ScrollBars("Scroll Bar 31553")
+    Set Cursor2 = MapSheet.ScrollBars("Scroll Bar 31554")
+End Sub
+
+' Procedure to produce Garmin upload file
+
+Sub GetTrack()
+    Dim Response As Integer
+    Dim FileName As String
+    Dim MainSheet As Object
+    Response = MsgBox("OK to download track from Garmin?", vbOKCancel, "gar2igc")
+    If Response = vbOK Then
+        Set MainSheet = Sheets("Main")
+        Let FileName = MainSheet.Cells(5, "A").Value
+        Shell ("gardowna -T " & FileName)
+    Else Response = MsgBox("Load cancelled", vbOKOnly, "gar2igc")
+    End If
+End Sub
+
+Sub RemoveLines()
+    Call Init
+    MapSheet.Cells(3, "B").Select
+    MapSheet.Lines.Delete
+    MapSheet.Ovals.Delete
+    MapSheet.Rectangles.Delete
+End Sub
+
+Sub SnapToZoom()
+    Let MapOriginLat = ZoomOriginLat
+    Let MapOriginLong = ZoomOriginLong
+    Let XScale = ZoomXScale
+    Let YScale = ZoomYScale
+    Call RemoveLines
+    Call DrawTask
+    MsgBox ("XScale=" & XScale & " YScale=" & YScale)
+End Sub
+
+Sub DrawLogs()
+    Dim I As Integer
+    For I = 1 To TrackCount
+        Call DrawLog(I)
+    Next I
+End Sub
+
+Sub DrawOneLog()
+    Call Init
+    Let CurrentLog = ActiveCell.Row
+    If CurrentLog <= TrackCount Then DrawLog (CurrentLog)
+End Sub
+   
+Sub LoadLog(TrackNum)
+    Dim LogFile, L As String
+    Dim RecordCount As Integer
+    Dim Deg, Min As String
+    Dim IntDeg, IntMin As Single
+    Dim Cont As Boolean
+    Dim AltFeet As Boolean
+        
+    On Error GoTo LoadError
+    
+    Let AltFeet = ConfigSheet.Cells(35, "C").Value = "ft"
+    Let LogFile = ConfigSheet.Cells(2, "C").Value & ConfigSheet.Cells(TrackNum + 2, "E").Value
+'    MsgBox ("LogFile=" & LogFile)
+    Let RecordCount = 0
+    ' Prepare file for input
+    Close #1
+    Open LogFile For Input As #1
+    Let Cont = True
+    Do While Not EOF(1) And Cont ' Loop until got first lat-long record
+        Line Input #1, L ' Read line into variable.
+        If Left(L, 1) = "B" And Mid(L, 8, 7) <> "0000000" Then
+            Let Cont = False
+            Let RecordCount = 1
+            Deg = Mid(L, 16, 3)
+            Min = Mid(L, 19, 5)
+            IntDeg = Val(Deg)
+            IntMin = Val(Min) / 1000
+            Let TrackLong(TrackNum, RecordCount) = LatLongDec(IntDeg, IntMin, Mid(L, 24, 1))
+            Deg = Mid(L, 8, 2)
+            Min = Mid(L, 10, 5)
+            IntDeg = Val(Deg)
+            IntMin = Val(Min) / 1000
+            Let TrackLat(TrackNum, RecordCount) = LatLongDec(IntDeg, IntMin, Mid(L, 15, 1))
+            Let TrackTime(TrackNum, RecordCount) = (Val(Mid(L, 2, 2)) * 3600) + (Val(Mid(L, 4, 2)) * 60) + Val(Mid(L, 6, 2))
+        End If
+    Loop
+    Do While Not EOF(1) ' Loop until end of file.
+        Line Input #1, L ' Read line into variable.
+        If Left(L, 1) = "B" And Mid(L, 8, 7) <> "0000000" Then
+            Let RecordCount = RecordCount + 1
+            Deg = Mid(L, 16, 3)
+            Min = Mid(L, 19, 5)
+            IntDeg = Val(Deg)
+            IntMin = Val(Min) / 1000
+            Let TrackLong(TrackNum, RecordCount) = LatLongDec(IntDeg, IntMin, Mid(L, 24, 1))
+            Deg = Mid(L, 8, 2)
+            Min = Mid(L, 10, 5) / 1000
+            IntDeg = Val(Deg)
+            IntMin = Val(Min)
+            Let TrackLat(TrackNum, RecordCount) = LatLongDec(IntDeg, IntMin, Mid(L, 15, 1))
+            Let TrackTime(TrackNum, RecordCount) = (Val(Mid(L, 2, 2)) * 3600) + (Val(Mid(L, 4, 2)) * 60) + Val(Mid(L, 6, 2))
+            Let TrackAlt(TrackNum, RecordCount) = Val(Mid(L, 26, 5))
+            If AltFeet Then
+                Let TrackAlt(TrackNum, RecordCount) = Val(Mid(L, 26, 5)) * 3.2808 ' convert metres in IGC file to feet
+            Else Let TrackAlt(TrackNum, RecordCount) = Val(Mid(L, 26, 5))
+            End If
+        End If
+        Loop
+    Let TrackLength(TrackNum) = RecordCount
+    ConfigSheet.Cells(TrackNum + 2, "H").Value = RecordCount    ' Display count on Config Sheet
+    Close #1    ' Close input file.
+    MapSheet.Cells(TrackNum, "A").Interior.Color = TrackColour(TrackNum)
+'    MsgBox (RecordCount & " records loaded from " & LogFile)
+    Exit Sub
+LoadError:
+    MsgBox ("Load error on file: " & LogFile)
+    Let TrackLength(TrackNum) = 0
+    MapSheet.Cells(TrackNum, "A").Interior.Color = ConfigSheet.Cells(2, "E").Interior.Color
+    MapSheet.Cells(TrackNum, "A").Interior.PatternColor = ConfigSheet.Cells(2, "E").Interior.PatternColor
+    MapSheet.Cells(TrackNum, "A").Interior.Pattern = ConfigSheet.Cells(2, "E").Interior.Pattern
+End Sub 'LoadLog
+
+Sub DrawLog(TrackNum)
+    Dim LineX1, LineX2, LineY1, LineY2 As Integer
+    Dim RecordNum As Integer
+    
+    MapSheet.Cells(TrackNum, "B").Value = "<<"
+    MapSheet.Cells(TrackNum, "B").Interior.Color = RGB(255, 255, 255)
+    LineX1 = DecToCoordX(TrackLong(TrackNum, 1))
+    LineY1 = DecToCoordY(TrackLat(TrackNum, 1))
+    Set Cursor1Obj = MapSheet.Rectangles.Add(LineX1 - 3, LineY1 - 3, 6, 6)
+    Set Cursor2Obj = MapSheet.Rectangles.Add(LineX1 - 3, LineY1 - 3, 6, 6)
+    For RecordNum = 2 To TrackLength(TrackNum)
+        LineX2 = DecToCoordX(TrackLong(TrackNum, RecordNum))
+        LineY2 = DecToCoordY(TrackLat(TrackNum, RecordNum))
+        With MapSheet.Lines.Add(LineX1, LineY1, LineX2, LineY2)
+              If TrackAlt(TrackNum, RecordNum) > TrackAlt(TrackNum, RecordNum - 1) Then
+                .Border.Color = ThermalColour
+              Else
+                .Border.Color = TrackColour(TrackNum)
+              End If
+        End With
+        Let LineX1 = LineX2
+        Let LineY1 = LineY2
+    Next RecordNum
+    MapSheet.Cells(TrackNum, "B").Interior.Color = RGB(0, 0, 0)
+    MapSheet.Cells(TrackNum, "B").Value = ""
+    Let TrackCursor1(TrackNum) = 1
+    Let TrackCursor2(TrackNum) = 1
+    Cursor1.Max = TrackLength(TrackNum)
+    Cursor2.Max = TrackLength(TrackNum)
+End Sub
+
+Sub DrawThermals()
+    Dim X, Y As Integer
+    Dim CurrentAlt, RecordNum, ThermalStart As Integer
+    Dim ThermalStrength As Single
+    
+    MapSheet.Cells(CurrentLog, "B").Value = "<<"
+    MapSheet.Cells(CurrentLog, "B").Interior.Color = RGB(255, 255, 255)
+    Let CurrentAlt = TrackAlt(CurrentLog, 1)
+    
+    For RecordNum = 2 To TrackLength(CurrentLog)
+'        if TrackAlt(CurrentLog,RecordNum) > Track
+        Let X = DecToCoordX(TrackLong(CurrentLog, RecordNum))
+        Let Y = DecToCoordY(TrackLat(CurrentLog, RecordNum))
+        With MapSheet.Ovals.Add(X, Y, 12, 12)
+              .Border.Color = RGB(255, 0, 0)
+        End With
+    Next RecordNum
+    MapSheet.Cells(CurrentLog, "B").Interior.Color = RGB(0, 0, 0)
+    MapSheet.Cells(CurrentLog, "B").Value = ""
+End Sub
+
+Sub WormRace()
+    Dim TimeNow As Long
+    Dim TimeStep As Integer
+    Dim I As Long
+    Dim Cont As Boolean
+    
+    Let TimeStep = ConfigSheet.Cells(30, "C").Value
+    For I = 1 To TrackCount
+        Let TrackOffset(I) = ConfigSheet.Cells(I + 2, "F").Value
+        Let TrackCurrent(I) = 1
+    Next I
+    Let TimeNow = TrackTime(1, 1) + TrackOffset(1)
+    For I = 1 To TrackCount  ' Get initial X1, Y1 for each track
+        Do While TrackTime(I, TrackCurrent(I)) + TrackOffset(I) < TimeNow And TrackCurrent(I) < TrackLength(I)
+            Let TrackCurrent(I) = TrackCurrent(I) + 1
+        Loop
+        LineX1(I) = DecToCoordX(TrackLong(I, TrackCurrent(I)))
+        LineY1(I) = DecToCoordY(TrackLat(I, TrackCurrent(I)))
+        Set WormObj(I) = MapSheet.Ovals.Add(LineX1(I) - 3, LineY1(I) - 3, 6, 6)
+        WormObj(I).Interior.Color = TrackColour(I)
+        WormObj(I).Border.Color = TrackColour(I)
+    Next I
+    ' MsgBox ("got initital. TrackCurrent(1)=" & TrackCurrent(1) & " TrackCurrent(2)=" & TrackCurrent(2))
+    Let Cont = True
+    Do While Cont
+        Let TimeNow = TimeNow + TimeStep
+        Let Cont = False
+        For I = 1 To TrackCount
+            Do While TrackTime(I, TrackCurrent(I)) + TrackOffset(I) < TimeNow And TrackCurrent(I) < TrackLength(I)
+                Let TrackCurrent(I) = TrackCurrent(I) + 1
+            Loop
+            ' MsgBox ("Next step @ " & TimeNow & ". TrackCurrent(1)=" & TrackCurrent(1) & " TrackCurrent(2)=" & TrackCurrent(2))
+            LineX2(I) = DecToCoordX(TrackLong(I, TrackCurrent(I)))
+            LineY2(I) = DecToCoordY(TrackLat(I, TrackCurrent(I)))
+            WormObj(I).Delete
+            Set WormObj(I) = MapSheet.Ovals.Add(LineX2(I) - 3, LineY2(I) - 3, 6, 6)
+            WormObj(I).Interior.Color = TrackColour(I)
+            WormObj(I).Border.Color = TrackColour(I)
+            Let LineX1(I) = LineX2(I)
+            Let LineY1(I) = LineY2(I)
+            If TrackCurrent(I) < TrackLength(I) Then Let Cont = True
+        Next I
+        DoEvents
+        For I = 1 To 1000 * WormDelay ' delay
+        Next I
+    Loop
+End Sub
+
+Sub SaveGrid()
+    Call Init
+    ConfigSheet.Cells(23, "C").Value = MapOriginLat
+    ConfigSheet.Cells(24, "C").Value = MapOriginLong
+    ConfigSheet.Cells(25, "C").Value = XScale
+    ConfigSheet.Cells(26, "C").Value = YScale
+End Sub
+
+Sub DrawTask()
+    Dim X1, X2, Y1, Y2 As Integer
+    Dim Lat1, Long1, Lat2, Long2 As Single
+    Dim Row As Integer
+    
+    Let TaskLength = 0
+    With ConfigSheet
+        Let Long1 = .Cells(4, "C")
+        X1 = DecToCoordX(Long1)
+        Let Lat1 = .Cells(4, "B")
+        Y1 = DecToCoordY(Lat1)
+        Let Row = 5
+        Do While ConfigSheet.Cells(Row, "A") <> ""
+            Let Long2 = .Cells(Row, "C")
+            X2 = DecToCoordX(Long2)
+            Let Lat2 = .Cells(Row, "B")
+            Y2 = DecToCoordY(Lat2)
+            With MapSheet.Lines.Add(X1, Y1, X2, Y2)
+                  .Border.Color = RGB(255, 255, 255)
+            End With
+            Let TaskLength = TaskLength + DecToDist(Lat1, Long1, Lat2, Long2)
+            Let Lat1 = Lat2
+            Let Long1 = Long2
+            X1 = X2
+            Y1 = Y2
+            Let Row = Row + 1
+        Loop
+    End With
+    Let TPCount = Row - 4
+    ConfigSheet.Cells(13, "C").Value = TaskLength
+End Sub
+
+Sub ZoomIn()
+    Dim Factor As Single
+    Let Factor = ConfigSheet.Cells(29, "C").Value
+    
+    Let ZoomOriginLong = ZoomOriginLong + (Xsize / ZoomXScale * (1 - 1 / Factor) / 2)
+    Let ZoomOriginLat = ZoomOriginLat - (YSize / ZoomYScale * (1 - 1 / Factor) / 2)
+    Let ZoomXScale = ZoomXScale * Factor
+    Let ZoomYScale = ZoomYScale * Factor
+    
+    Call DrawBox
+End Sub
+
+Sub ZoomOut()
+    Dim Factor As Single
+    Let Factor = ConfigSheet.Cells(29, "C").Value
+    
+    Let ZoomOriginLong = ZoomOriginLong - Factor * (Xsize / ZoomXScale * (1 - 1 / Factor) / 2)
+    Let ZoomOriginLat = ZoomOriginLat + Factor * (YSize / ZoomYScale * (1 - 1 / Factor) / 2)
+    Let ZoomXScale = ZoomXScale / Factor
+    Let ZoomYScale = ZoomYScale / Factor
+    
+    Call DrawBox
+End Sub
+
+Sub GoW()
+    Let ZoomOriginLong = ZoomOriginLong - (Xsize / ZoomXScale * ShiftFactor)
+    Call DrawBox
+End Sub
+
+Sub GoE()
+    Let ZoomOriginLong = ZoomOriginLong + (Xsize / ZoomXScale * ShiftFactor)
+    Call DrawBox
+End Sub
+
+Sub GoN()
+    Let ZoomOriginLat = ZoomOriginLat + (YSize / ZoomYScale * ShiftFactor)
+    Call DrawBox
+End Sub
+
+Sub GoS()
+    Let ZoomOriginLat = ZoomOriginLat - (YSize / ZoomYScale * ShiftFactor)
+    Call DrawBox
+End Sub
+
+Sub GoNE()
+    Let ZoomOriginLong = ZoomOriginLong + (Xsize / ZoomXScale * ShiftFactor)
+    Let ZoomOriginLat = ZoomOriginLat + (YSize / ZoomYScale * ShiftFactor)
+    Call DrawBox
+End Sub
+
+Sub GoSE()
+    Let ZoomOriginLong = ZoomOriginLong + (Xsize / ZoomXScale * ShiftFactor)
+    Let ZoomOriginLat = ZoomOriginLat - (YSize / ZoomYScale * ShiftFactor)
+    Call DrawBox
+End Sub
+
+Sub GoNW()
+    Let ZoomOriginLong = ZoomOriginLong - (Xsize / ZoomXScale * ShiftFactor)
+    Let ZoomOriginLat = ZoomOriginLat + (YSize / ZoomYScale * ShiftFactor)
+    Call DrawBox
+End Sub
+
+Sub GoSW()
+    Let ZoomOriginLong = ZoomOriginLong - (Xsize / ZoomXScale * ShiftFactor)
+    Let ZoomOriginLat = ZoomOriginLat - (YSize / ZoomYScale * ShiftFactor)
+    Call DrawBox
+End Sub
+
+Sub DrawBox()
+    Dim X1, X2, Y1, Y2 As Integer
+    Dim TempLine As Object
+    
+    Call Init
+    Let X1 = DecToCoordX(ZoomOriginLong)
+    Let X2 = X1 + (XScale * Xsize / ZoomXScale)
+    Let Y1 = DecToCoordY(ZoomOriginLat)
+    Let Y2 = Y1 + (YScale * YSize / ZoomYScale)
+'    MsgBox ("X1=" & X1 & " X2=" & X2 & " Y1=" & Y1 & " Y2=" & Y2)
+
+    Call BlankPrev
+    
+    With MapSheet.Lines.Add(X1, Y1, X2, Y1)
+              .Border.Color = RGB(255, 0, 0)
+        End With
+    With MapSheet.Lines.Add(X2, Y1, X2, Y2)
+              .Border.Color = RGB(255, 0, 0)
+        End With
+    With MapSheet.Lines.Add(X2, Y2, X1, Y2)
+              .Border.Color = RGB(255, 0, 0)
+        End With
+    With MapSheet.Lines.Add(X1, Y2, X1, Y1)
+              .Border.Color = RGB(255, 0, 0)
+        End With
+    Set TempLine = MapSheet.Lines.Add(X1, Y1, X2, Y2)
+    TempLine.Border.Color = RGB(55, 55, 200)
+    TempLine.Delete
+    Let PrevX1 = X1
+    Let PrevX2 = X2
+    Let PrevY1 = Y1
+    Let PrevY2 = Y2
+End Sub
+
+Sub BlankPrev()
+    With MapSheet.Lines.Add(PrevX1, PrevY1, PrevX2, PrevY1)
+              .Border.Color = RGB(0, 0, 0)
+        End With
+    With MapSheet.Lines.Add(PrevX2, PrevY1, PrevX2, PrevY2)
+              .Border.Color = RGB(0, 0, 0)
+        End With
+    With MapSheet.Lines.Add(PrevX2, PrevY2, PrevX1, PrevY2)
+              .Border.Color = RGB(0, 0, 0)
+        End With
+    With MapSheet.Lines.Add(PrevX1, PrevY2, PrevX1, PrevY1)
+              .Border.Color = RGB(0, 0, 0)
+        End With
+End Sub
+
+Sub TimeStart()
+    Dim I As Integer
+    For I = 1 To TrackCount
+        ConfigSheet.Cells(I + 2, "F").Value = 0
+    Next I
+End Sub
+
+Sub SyncStart()
+    Dim I As Integer
+    For CurrentLog = 1 To TrackCount
+        Call CalcTimes
+    Next CurrentLog
+    For I = 1 To TrackCount
+        ConfigSheet.Cells(I + 2, "F").Value = MaxStart - TPTime(I, 1)
+    Next I
+End Sub
+
+Function SecTime(Secs)
+    Dim Hh, Mm, Ss As Integer
+    
+    Let Hh = Int(Secs / 3600)
+    Let Mm = Int((Secs - Hh * 3600) / 60)
+    Let Ss = Int(Secs - Hh * 3600 - Mm * 60)
+    Let SecTime = TimeSerial(Hh, Mm, Ss)
+End Function
+
+Function DecToDist(Lat1, Long1, Lat2, Long2) As Single
+    Dim LatR1, LongR1, LatR2, LongR2 As Single
+    Let LatR1 = Lat1 * Pi() / 180
+    Let LongR1 = Long1 * Pi() / 180
+    Let LatR2 = Lat2 * Pi() / 180
+    Let LongR2 = Long2 * Pi() / 180
+    DecToDist = Application.Acos(Sin(LatR1) * Sin(LatR2) + Cos(LatR1) * Cos(LatR2) * Cos(LongR1 - LongR2) - 0.000000000001) * 60.04042835 * 180 / Pi()
+End Function
+
+Function DegreesToCoord(Deg, Min, EWNS) As Single
+    If (EWNS = "W") Or (EWNS = "E") Then    ' Longitude
+        DegreesToCoord = (LatLongDec(Deg, Min, EWNS) - MapOriginLong) * XScale
+    Else                                    ' Latitude
+        DegreesToCoord = (MapOriginLat - LatLongDec(Deg, Min, EWNS)) * YScale
+    End If
+End Function
+
+Function DecToCoordX(Deg) As Integer
+    DecToCoordX = (Deg - MapOriginLong) * XScale
+End Function
+
+Function DecToCoordY(Deg) As Integer
+    DecToCoordY = (MapOriginLat - Deg) * YScale
+End Function
+
+Function XtoDegrees(X) As Single
+    XtoDegrees = X / XScale + MapOriginLong
+End Function
+
+Function YtoDegrees(Y) As Single
+    YtoDegrees = MapOriginLat - (Y / YScale)
+End Function
+
+Function LatLongDec(Deg, Min, EWNS) As Single
+    Dim PosNeg
+
+    If (EWNS = "W") Or (EWNS = "S") Then
+        PosNeg = -1
+    Else
+        PosNeg = 1
+    End If
+
+    LatLongDec = (Deg + (Min / 60)) * PosNeg
+End Function
+
+Function Pi()
+    Pi = 3.1415926
+End Function
+    
+Sub Cursor1_Click()
+    Dim X, Y As Single
+    Dim Lat1, Long1, Lat2, Long2 As Single
+    Cursor1Obj.Delete
+    Let TrackCursor1(CurrentLog) = Cursor1.Value
+    Let X = DecToCoordX(TrackLong(CurrentLog, TrackCursor1(CurrentLog)))
+    Let Y = DecToCoordY(TrackLat(CurrentLog, TrackCursor1(CurrentLog)))
+    Set Cursor1Obj = MapSheet.Rectangles.Add(X - 3, Y - 3, 6, 6)
+    Cursor1Obj.Interior.Color = ConfigSheet.Cells(33, "C").Interior.Color
+    MapSheet.Cells(1, "D").Value = SecTime(TrackTime(CurrentLog, TrackCursor1(CurrentLog))) + ConfigSheet.Cells(2, "G").Value
+    MapSheet.Cells(2, "D").Value = TrackAlt(CurrentLog, TrackCursor1(CurrentLog))
+    Call CalcCursor
+End Sub
+
+Sub Cursor2_Click()
+    Dim X, Y As Single
+    Cursor2Obj.Delete
+    Let TrackCursor2(CurrentLog) = Cursor2.Value
+    Let X = DecToCoordX(TrackLong(CurrentLog, TrackCursor2(CurrentLog)))
+    Let Y = DecToCoordY(TrackLat(CurrentLog, TrackCursor2(CurrentLog)))
+    Set Cursor2Obj = MapSheet.Rectangles.Add(X - 3, Y - 3, 6, 6)
+    Cursor2Obj.Interior.Color = ConfigSheet.Cells(34, "C").Interior.Color
+    MapSheet.Cells(1, "E").Value = SecTime(TrackTime(CurrentLog, TrackCursor2(CurrentLog))) + ConfigSheet.Cells(2, "G").Value
+    MapSheet.Cells(2, "E").Value = TrackAlt(CurrentLog, TrackCursor2(CurrentLog))
+    Call CalcCursor
+End Sub
+
+Sub CalcCursor()
+    Dim Lat1, Long1, Lat2, Long2 As Single
+    
+    Let Lat1 = TrackLat(CurrentLog, TrackCursor1(CurrentLog))
+    Let Long1 = TrackLong(CurrentLog, TrackCursor1(CurrentLog))
+    Let Lat2 = TrackLat(CurrentLog, TrackCursor2(CurrentLog))
+    Let Long2 = TrackLong(CurrentLog, TrackCursor2(CurrentLog))
+    MapSheet.Cells(4, "C").Value = DecToDist(Lat1, Long1, Lat2, Long2)
+End Sub
+
+Sub CalcTimes()
+    Dim I As Integer
+    Dim Cont As Boolean
+    Dim CurrentIndex, LastTPIndex As Integer ' LastTPIndex holds the log point index for last TP before finish
+    Dim CurrentDist As Single
+    Dim TPLat(MaxTPs), TPLong(MaxTPs) As Single
+    Dim TPDist(MaxTPs) As Single ' distance of that point from TP
+        
+    ' Initialise
+    For I = 1 To TPCount
+        Let TPLat(I) = ConfigSheet.Cells(I + 3, "B").Value ' start with startpoint lat,long
+        Let TPLong(I) = ConfigSheet.Cells(I + 3, "C").Value
+        Let TPDist(I) = 1000
+    Next I
+    Let Cont = True
+    Let LastTPIndex = TrackLength(CurrentLog)
+    Let CurrentIndex = TrackLength(CurrentLog)
+    ' Get START time
+    Do While Cont And CurrentIndex > 1 ' Read back from end of trace until >20Nm away
+        Let CurrentIndex = CurrentIndex - 1
+        Let CurrentDist = DecToDist(TPLat(1), TPLong(1), TrackLat(CurrentLog, CurrentIndex), TrackLong(CurrentLog, CurrentIndex))
+        Let Cont = CurrentDist < 20
+    Loop
+    Let Cont = True
+    Do While Cont And CurrentIndex > 1 ' Read back from there until within .8Nm
+        Let CurrentIndex = CurrentIndex - 1
+        Let CurrentDist = DecToDist(TPLat(1), TPLong(1), TrackLat(CurrentLog, CurrentIndex), TrackLong(CurrentLog, CurrentIndex))
+        Let Cont = CurrentDist > 0.8
+    Loop
+    Let TPTime(CurrentLog, 1) = TrackTime(CurrentLog, CurrentIndex)
+    If TPTime(CurrentLog, 1) > MaxStart Then Let MaxStart = TPTime(CurrentLog, 1)
+    ConfigSheet.Cells(CurrentLog + 2, "G").Value = SecTime(TPTime(CurrentLog, 1)) + ConfigSheet.Cells(2, "G").Value
+    ' MsgBox ("Start: " & ConfigSheet.Cells(CurrentLog + 2, "I").Value)
+    ' ok, done start, now do INTERMEDIATE TP's
+    Do While CurrentIndex < TrackLength(CurrentLog) ' Read forward from there accumulating times of TP's
+        Let CurrentIndex = CurrentIndex + 1
+        For I = 2 To TPCount - 1
+            Let CurrentDist = DecToDist(TPLat(I), TPLong(I), TrackLat(CurrentLog, CurrentIndex), TrackLong(CurrentLog, CurrentIndex))
+            If CurrentDist < TPDist(I) Then
+                Let TPDist(I) = CurrentDist
+                Let TPTime(CurrentLog, I) = TrackTime(CurrentLog, CurrentIndex)
+                Let LastTPIndex = CurrentIndex
+            End If
+        Next
+    Loop
+    For I = 2 To TPCount - 1
+        ConfigSheet.Cells(CurrentLog + 2, 10 + I).Value = SecTime(TPTime(CurrentLog, I)) + ConfigSheet.Cells(2, "G").Value
+        ' MsgBox ("TP " & I & ": " & ConfigSheet.Cells(CurrentLog + 2, 8 + I).Value)
+    Next I
+    ' now do FINISH
+    Let CurrentIndex = LastTPIndex
+    Let Cont = True
+    Do While Cont And CurrentIndex < TrackLength(CurrentLog)
+        Let CurrentIndex = CurrentIndex + 1
+        Let CurrentDist = DecToDist(TPLat(TPCount), TPLong(TPCount), TrackLat(CurrentLog, CurrentIndex), TrackLong(CurrentLog, CurrentIndex))
+        Let Cont = CurrentDist > 0.25
+    Loop
+    Let TPTime(CurrentLog, TPCount) = TrackTime(CurrentLog, CurrentIndex)
+    ConfigSheet.Cells(CurrentLog + 2, "I").Value = SecTime(TPTime(CurrentLog, I)) + ConfigSheet.Cells(2, "G").Value
+    ' MsgBox ("Finish: " & ConfigSheet.Cells(CurrentLog + 2, 8 + TPCount).Value)
+End Sub
+
